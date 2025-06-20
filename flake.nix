@@ -11,9 +11,18 @@
       crane,
     }:
     let
-      forAllSystems = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
+      # [ String ] -> String -> Any -> AttrSet
+      # We pass in the flakeExposed systems, as that is a safe subset.
+      #
+      # Then this returns a function that has a string parameter. That string
+      # is the attribute key.
+      eachSystem = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
 
-      common = forAllSystems (system: rec {
+      # Generate a set of common values for each system.
+      # The key is common.${system}.{ packages, pkgs, craneLib }
+      common = eachSystem (system: rec {
+        packages = self.packages.${system};
+
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
@@ -23,30 +32,32 @@
 
         craneLib = crane.mkLib pkgs;
       });
+
+      # Return a function with the common set of values at the parameter.
+      forAllSystems = f: eachSystem (system: f common.${system});
     in
     {
       packages = forAllSystems (
-        system:
+        common:
         let
-          inherit (common.${system}) pkgs craneLib;
+          inherit (common) pkgs;
         in
         {
-          default = pkgs.callPackage ./nix { inherit craneLib; };
+          default = pkgs.wild;
         }
       );
 
       overlays.default = import self;
 
-      formatter = forAllSystems (system: common.${system}.pkgs.nixfmt-tree);
+      formatter = forAllSystems (common: common.pkgs.nixfmt-tree);
 
       checks = forAllSystems (
-        system:
+        common:
         let
-          inherit (common.${system}) pkgs craneLib;
-          inherit (self.packages.${system}) default;
+          inherit (common) pkgs;
         in
         {
-          wild = default.overrideAttrs {
+          wild = pkgs.wild.overrideAttrs {
             doCheck = true;
             doInstallCheck = false;
             # Skip the build phase and don't install anything
@@ -56,12 +67,12 @@
             installPhase = "touch $out";
           };
         }
-        // ((pkgs.callPackage ./nix { inherit craneLib; }).tests)
+        // (pkgs.wild.tests)
       );
 
-      devShells = forAllSystems (system: {
-        default = common.${system}.pkgs.callPackage ./nix/shell.nix {
-          inherit (common.${system}) craneLib;
+      devShells = forAllSystems (common: {
+        default = common.pkgs.callPackage ./nix/shell.nix {
+          inherit (common) craneLib;
         };
       });
     };
