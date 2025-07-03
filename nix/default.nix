@@ -4,7 +4,6 @@
   stdenv,
   gccStdenv,
   clangStdenv,
-  fetchpatch,
   makeBinaryWrapper,
   craneLib,
   versionCheckHook,

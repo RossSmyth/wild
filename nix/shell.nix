@@ -1,6 +1,14 @@
 {
   pkgs ? import <nixpkgs> { },
-  craneLib,
+  craneLib ?
+    let
+      node = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.crane.locked;
+      crane = pkgs.fetchFromGitHub {
+        inherit (node) owner repo rev;
+        hash = node.narHash;
+      };
+    in
+    pkgs.callPackage crane { },
 }:
 pkgs.mkShell {
   packages = [
